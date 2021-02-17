@@ -1,6 +1,6 @@
 package parser
 
-class LL1Parser(private val rules: List<ProductionRuleData>, private val startSymbol: String) {
+class LL1ParserGenerator(private val rules: List<ProductionRuleData>, private val startSymbol: String) {
     //開始記号はSとする
     //V do not contains $
 
