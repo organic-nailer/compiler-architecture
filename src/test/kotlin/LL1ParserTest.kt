@@ -1,20 +1,39 @@
 import org.junit.Test
 import parser.LL1Parser
-import parser.ProductionRuleData
 
 class LL1ParserTest {
+    fun String.tokenize(): List<String> {
+        return this.split(" ")
+    }
     @Test
     fun test() {
         val parser = LL1Parser(listOf(
-            ProductionRuleData('S', "TE"),
-            ProductionRuleData('E', "+TE"),
-            ProductionRuleData('E', "ε"),
-            ProductionRuleData('T', "Ft"),
-            ProductionRuleData('t', "*Ft"),
-            ProductionRuleData('t', "ε"),
-            ProductionRuleData('F', "(S)"),
-            ProductionRuleData('F', "i"),
-        ))
+            LL1Parser.ProductionRuleData("E", "T E'".tokenize()),
+            LL1Parser.ProductionRuleData("E'", "+ T E'".tokenize()),
+            LL1Parser.ProductionRuleData("E'", "ε".tokenize()),
+            LL1Parser.ProductionRuleData("T", "F T'".tokenize()),
+            LL1Parser.ProductionRuleData("T'", "* F T'".tokenize()),
+            LL1Parser.ProductionRuleData("T'", "ε".tokenize()),
+            LL1Parser.ProductionRuleData("F", "( E )".tokenize()),
+            LL1Parser.ProductionRuleData("F", "i".tokenize()),
+        ), "E")
+        assert(true)
+    }
+
+
+    @Test
+    fun test2() {
+        val parser = LL1Parser(listOf(
+            LL1Parser.ProductionRuleData("E", "T E'".tokenize()),
+            LL1Parser.ProductionRuleData("E'", "+ T E'".tokenize()),
+            LL1Parser.ProductionRuleData("E'", "ε".tokenize()),
+            LL1Parser.ProductionRuleData("T", "F T'".tokenize()),
+            LL1Parser.ProductionRuleData("T'", "* F T'".tokenize()),
+            LL1Parser.ProductionRuleData("T'", "ε".tokenize()),
+            LL1Parser.ProductionRuleData("F", "( E )".tokenize()),
+            LL1Parser.ProductionRuleData("F", "i".tokenize()),
+        ), "E")
+        println("g: ${parser.generateTable()}")
         assert(true)
     }
 }

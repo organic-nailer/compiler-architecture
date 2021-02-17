@@ -1,18 +1,18 @@
 package parser
 
-class LL1Parser(val rules: List<ProductionRuleData>) {
+class LL1Parser(private val rules: List<ProductionRuleData>, private val startSymbol: String) {
     //開始記号はSとする
     //V do not contains $
 
     companion object {
-        private const val EMPTY = 'ε'
+        private const val EMPTY = "ε"
     }
 
-    val terminalTokens = mutableListOf<Char>()
-    val nonTerminalTokens = mutableListOf<Char>()
-    val firstMap = mutableMapOf<Char, MutableSet<Char>>()
-    val followMap = mutableMapOf<Char, MutableSet<Char>>()
-    val directorMap = mutableMapOf<Pair<Char,String>, MutableSet<Char>>()
+    val terminalTokens = mutableListOf<String>()
+    val nonTerminalTokens = mutableListOf<String>()
+    val firstMap = mutableMapOf<String, MutableSet<String>>()
+    val followMap = mutableMapOf<String, MutableSet<String>>()
+    val directorMap = mutableMapOf<Pair<String, List<String>>, MutableSet<String>>()
 
     init {
         calcTokenKind()
@@ -38,21 +38,21 @@ class LL1Parser(val rules: List<ProductionRuleData>) {
         println("N=$nonTerminalTokens")
     }
 
-    private fun getFirst(value: String): Set<Char> {
+    private fun getFirst(value: List<String>): Set<String> {
         if(value.isEmpty()) return setOf()
         if(terminalTokens.contains(value.first()) || value.first() == EMPTY) {
             return setOf(value.first())//{α} or {ε}
         }
         firstMap[value.first()]?.let {
-            if(!it.contains(EMPTY) || value.length == 1) {
+            if(!it.contains(EMPTY) || value.size == 1) {
                 return it //First(Y)
             }
-            return it.minus(EMPTY).union(getFirst(value.substring(1))) //(First(Y)-{ε})∪First(α)
+            return it.minus(EMPTY).union(getFirst(value.slice(1 until value.size))) //(First(Y)-{ε})∪First(α)
         }
         return emptySet()
     }
 
-    private fun addFirst(key: Char, set: Set<Char>) {
+    private fun addFirst(key: String, set: Set<String>) {
         firstMap[key]?.addAll(set) ?: kotlin.run {
             firstMap[key] = set.toMutableSet()
         }
@@ -72,15 +72,13 @@ class LL1Parser(val rules: List<ProductionRuleData>) {
                     addFirst(rule.left, diff)
                 }
             }
-            //println("tochu")
-            //println("$firstMap")
         }
         println("first=")
         println("$firstMap")
     }
 
     //return true if set is updated
-    private fun addFollow(key: Char, set: Set<Char>): Boolean {
+    private fun addFollow(key: String, set: Set<String>): Boolean {
         println("addFollow: current=${followMap[key]}, key=$key, set=$set")
         return followMap[key]?.addAll(set) ?: kotlin.run {
             followMap[key] = set.toMutableSet()
@@ -90,20 +88,20 @@ class LL1Parser(val rules: List<ProductionRuleData>) {
 
     private fun calcFollow() {
         println("CalcFollow")
-        followMap['S'] = mutableSetOf('$')
+        followMap[startSymbol] = mutableSetOf("$")
         var updated = true
         while(updated) {
             updated = false
             for(rule in rules) {
                 for(i in rule.right.indices) {
                     if(nonTerminalTokens.contains(rule.right[i])) {
-                        if(i >= rule.right.length - 1) {
+                        if(i >= rule.right.size - 1) {
                             val u = addFollow(rule.right[i], followMap[rule.left] ?: emptySet())
                             if(u) updated = true
                         }
                         else {
-                            val firstBeta = getFirst(rule.right.substring(i+1))
-                            println("First(${rule.right.substring(i+1)}) = $firstBeta")
+                            val firstBeta = getFirst(rule.right.slice(i+1 until rule.right.size))
+                            println("First(${rule.right.slice(i+1 until rule.right.size)}) = $firstBeta")
                             var u = addFollow(rule.right[i], firstBeta.minus(EMPTY))
                             if(firstBeta.contains(EMPTY)) {
                                 u = addFollow(rule.right[i], followMap[rule.left] ?: emptySet())
@@ -120,7 +118,7 @@ class LL1Parser(val rules: List<ProductionRuleData>) {
         println("$followMap")
     }
 
-    private fun addDirector(key: Pair<Char,String>, set: Set<Char>) {
+    private fun addDirector(key: Pair<String,List<String>>, set: Set<String>) {
         directorMap[key]?.addAll(set) ?: kotlin.run {
             directorMap[key] = set.toMutableSet()
         }
@@ -141,9 +139,35 @@ class LL1Parser(val rules: List<ProductionRuleData>) {
         println("director")
         println("$directorMap")
     }
-}
 
-data class ProductionRuleData(
-    val left: Char,
-    val right: String
-)
+    private fun checkIsLL1Grammar(): Boolean {
+        for(n in nonTerminalTokens) {
+            val set = mutableSetOf<String>()
+            for(entry in directorMap.filterKeys { k -> k.first == n }.entries) {
+                if((entry.value intersect set).isNotEmpty()) {
+                    return false
+                }
+                set.addAll(entry.value)
+            }
+        }
+        return true
+    }
+
+    fun generateTable(): Map<Pair<String,String>, List<String>>? {
+        if(!checkIsLL1Grammar()) return null
+
+        val map = mutableMapOf<Pair<String,String>, List<String>>()
+
+        for(entry in directorMap.toMap()) {
+            for(t in entry.value) {
+                map[entry.key.first to t] = entry.key.second
+            }
+        }
+        return map
+    }
+
+    data class ProductionRuleData(
+        val left: String,
+        val right: List<String> //tokenized
+    )
+}
