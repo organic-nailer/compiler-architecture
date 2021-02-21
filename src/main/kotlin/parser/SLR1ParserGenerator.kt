@@ -1,6 +1,6 @@
 package parser
 
-import java.lang.Exception
+import kotlin.Exception
 
 class SLR1ParserGenerator(
     private val rules: List<SLR1ParserGenerator.ProductionRuleData>,
@@ -16,10 +16,28 @@ class SLR1ParserGenerator(
     val followMap = mutableMapOf<String, MutableSet<String>>()
     val gotoMap = mutableMapOf<Pair<String, String>, String>()
     val closureMap = mutableMapOf<Set<LRProductionRuleData>, String>()
+    val transitionMap = mutableMapOf<Pair<String, String>, TransitionData>()
+    enum class TransitionKind { SHIFT, REDUCE, ACCEPT }
+    data class TransitionData(
+        val kind: TransitionKind,
+        val value: String?,
+        val rule: ProductionRuleData?
+    ) {
+        override fun toString(): String {
+            return when(kind) {
+                TransitionKind.SHIFT -> "s$value"
+                TransitionKind.REDUCE -> "r${rule?.left}"
+                TransitionKind.ACCEPT -> "acc"
+            }
+        }
+    }
 
     init {
         calcTokenKind()
         calcGoto()
+        calcFirst()
+        calcFollow()
+        calcTransition()
     }
 
     private fun calcTokenKind() {
@@ -193,6 +211,40 @@ class SLR1ParserGenerator(
         )
     }
 
+    private fun calcTransition() {
+        for(entry in gotoMap) {
+            if(terminalTokens.contains(entry.key.second) || true) {
+                if(transitionMap.containsKey(entry.key)) {
+                    throw Exception("SLR競合1 $entry")
+                }
+                transitionMap[entry.key] = TransitionData(
+                    TransitionKind.SHIFT, entry.value, null
+                )
+            }
+        }
+        printTransitionMap()
+        for(entry in closureMap) {
+            entry.key.filter { r -> r.reducible }.forEach {
+                followMap[it.left]?.forEach { token ->
+                    if(transitionMap.containsKey(entry.value to token)) {
+                        throw Exception("SLR競合2 $entry")
+                    }
+                    transitionMap[entry.value to token] = TransitionData(
+                        TransitionKind.REDUCE, null, it.toRule()
+                    )
+                }
+            }
+            if(entry.key.any { r -> r.right.lastOrNull() == "$" && r.index == r.right.size - 1 }) {
+//                if(transitionMap.containsKey(entry.value to "$")) {
+//                    throw Exception("SLR競合3 $entry")
+//                }
+                transitionMap[entry.value to "$"] = TransitionData(
+                    TransitionKind.ACCEPT, null, null
+                )
+            }
+        }
+    }
+
     fun printClosureMap() {
         println("Closures")
         closureMap.forEach { t, u ->
@@ -212,6 +264,22 @@ class SLR1ParserGenerator(
             terminalTokens.forEach { print(" ${gotoMap[c to it]?.padStart(3) ?: "   "} ") }
             print(" ${gotoMap[c to "$"]?.padStart(3) ?: "   "} ")
             nonTerminalTokens.forEach { print(" ${gotoMap[c to it]?.padStart(3) ?: "   "} ") }
+            print("\n")
+        }
+    }
+
+    fun printTransitionMap() {
+        println("Transition Table")
+        print("   ")
+        terminalTokens.forEach { print(" ${it.padStart(3)} ") }
+        print("  $  ")
+        nonTerminalTokens.forEach { print(" ${it.padStart(3)} ") }
+        print("\n")
+        for(c in closureMap.values) {
+            print(c.padEnd(3))
+            terminalTokens.forEach { print(" ${transitionMap[c to it]?.toString()?.padStart(3) ?: "   "} ") }
+            print(" ${transitionMap[c to "$"]?.toString()?.padStart(3) ?: "   "} ")
+            nonTerminalTokens.forEach { print(" ${transitionMap[c to it]?.toString()?.padStart(3) ?: "   "} ") }
             print("\n")
         }
     }
@@ -247,6 +315,10 @@ class SLR1ParserGenerator(
         override fun toString(): String {
             return "$left->${right.toMutableList().apply { add(index,"・") }.joinToString("")}"
         }
+
+        fun toRule() = ProductionRuleData(
+            left, right
+        )
     }
 
     data class ProductionRuleData(
