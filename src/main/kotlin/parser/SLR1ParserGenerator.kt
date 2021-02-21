@@ -2,8 +2,8 @@ package parser
 
 import java.lang.Exception
 
-class LR0ParserGenerator(
-    private val rules: List<ProductionRuleData>,
+class SLR1ParserGenerator(
+    private val rules: List<SLR1ParserGenerator.ProductionRuleData>,
     private val startSymbol: String) {
 
     companion object {
@@ -12,6 +12,8 @@ class LR0ParserGenerator(
 
     val terminalTokens = mutableListOf<String>()
     val nonTerminalTokens = mutableListOf<String>()
+    val firstMap = mutableMapOf<String, MutableSet<String>>()
+    val followMap = mutableMapOf<String, MutableSet<String>>()
     val gotoMap = mutableMapOf<Pair<String, String>, String>()
     val closureMap = mutableMapOf<Set<LRProductionRuleData>, String>()
 
@@ -35,6 +37,86 @@ class LR0ParserGenerator(
         terminalTokens.remove(EMPTY)
         println("T=$terminalTokens")
         println("N=$nonTerminalTokens")
+    }
+
+    private fun getFirst(value: List<String>): Set<String> {
+        if(value.isEmpty()) return setOf()
+        if(terminalTokens.contains(value.first()) || value.first() == EMPTY) {
+            return setOf(value.first())//{α} or {ε}
+        }
+        firstMap[value.first()]?.let {
+            if(!it.contains(EMPTY) || value.size == 1) {
+                return it //First(Y)
+            }
+            return it.minus(EMPTY).union(getFirst(value.slice(1 until value.size))) //(First(Y)-{ε})∪First(α)
+        }
+        return emptySet()
+    }
+
+    private fun addFirst(key: String, set: Set<String>) {
+        firstMap[key]?.addAll(set) ?: kotlin.run {
+            firstMap[key] = set.toMutableSet()
+        }
+    }
+
+    private fun calcFirst() { //First集合を計算する
+        println("CalcFirst")
+        var updated = true
+        while(updated) {
+            updated = false
+            for(rule in rules) {
+                val firstAlpha = getFirst(rule.right)
+                val firstX = firstMap[rule.left] ?: emptySet()
+                val diff = firstAlpha.minus(firstX)
+                if(diff.isNotEmpty()) {
+                    updated = true
+                    addFirst(rule.left, diff)
+                }
+            }
+        }
+        println("first=")
+        println("$firstMap")
+    }
+
+    //return true if set is updated
+    private fun addFollow(key: String, set: Set<String>): Boolean {
+        println("addFollow: current=${followMap[key]}, key=$key, set=$set")
+        return followMap[key]?.addAll(set) ?: kotlin.run {
+            followMap[key] = set.toMutableSet()
+            return@run set.isNotEmpty()
+        }
+    }
+
+    private fun calcFollow() {
+        println("CalcFollow")
+        followMap[startSymbol] = mutableSetOf("$")
+        var updated = true
+        while(updated) {
+            updated = false
+            for(rule in rules) {
+                for(i in rule.right.indices) {
+                    if(nonTerminalTokens.contains(rule.right[i])) {
+                        if(i >= rule.right.size - 1) {
+                            val u = addFollow(rule.right[i], followMap[rule.left] ?: emptySet())
+                            if(u) updated = true
+                        }
+                        else {
+                            val firstBeta = getFirst(rule.right.slice(i+1 until rule.right.size))
+                            println("First(${rule.right.slice(i+1 until rule.right.size)}) = $firstBeta")
+                            var u = addFollow(rule.right[i], firstBeta.minus(EMPTY))
+                            if(firstBeta.contains(EMPTY)) {
+                                u = addFollow(rule.right[i], followMap[rule.left] ?: emptySet())
+                            }
+                            if(u) updated = true
+                        }
+                    }
+                }
+            }
+            println("tochu")
+            println("$followMap")
+        }
+        println("follow=")
+        println("$followMap")
     }
 
     private fun calcGoto() {
